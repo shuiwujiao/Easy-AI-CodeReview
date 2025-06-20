@@ -283,14 +283,24 @@ class CodeReviewer(BaseReviewer):
         
         logger.info(f"检测到的语言对应的提示词: {prompt_key}")
         logger.info(f"当前审查风格: {style}")
+        logger.info(f"可用的语言提示词映射: {self.language_prompts}")
         
         # 加载对应的提示词
         if prompt_key != "code_review_prompt":
             logger.info(f"使用语言特定提示词: {prompt_key}")
-            prompts = self._load_language_specific_prompts(prompt_key, style)
+            try:
+                prompts = self._load_language_specific_prompts(prompt_key, style)
+                logger.info(f"成功加载语言特定提示词: {prompt_key}")
+            except Exception as e:
+                logger.error(f"加载语言特定提示词失败: {e}, 回退到通用提示词")
+                prompts = self._load_fallback_prompts(style)
         else:
             logger.info("使用通用提示词: code_review_prompt")
             prompts = self._load_fallback_prompts(style)
+        
+        # 记录实际使用的提示词内容（前100个字符）
+        system_content = prompts["system_message"]["content"]
+        logger.info(f"实际使用的system prompt前100字符: {system_content[:100]}...")
         
         messages = [
             prompts["system_message"],
