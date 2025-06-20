@@ -225,7 +225,11 @@ class CodeReviewer(BaseReviewer):
             if isinstance(change, dict):
                 # GitLab API返回的格式
                 if 'diff' in change:
-                    diff_content.append(change['diff'])
+                    diff_text = change['diff']
+                    # 如果diff不包含文件路径信息，但有new_path，则添加标准diff头
+                    if not diff_text.startswith('diff --git') and 'new_path' in change:
+                        diff_text = f"diff --git a/{change['new_path']} b/{change['new_path']}\nindex 0000000..0000000 100644\n--- a/{change['new_path']}\n+++ b/{change['new_path']}\n{diff_text}"
+                    diff_content.append(diff_text)
                 elif 'new_path' in change and 'old_path' in change:
                     # 构建简单的diff格式
                     diff_content.append(f"diff --git a/{change['old_path']} b/{change['new_path']}")
