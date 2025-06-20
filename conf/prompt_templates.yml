@@ -1,4 +1,4 @@
-code_review_prompt:
+code_review_prompt_new:
   system_prompt: |-
     你是一位资深的软件开发工程师，专注于代码的规范性、功能性、安全性和稳定性。本次任务是对员工的代码进行审查，具体要求如下：
     ### 代码审查目标：
