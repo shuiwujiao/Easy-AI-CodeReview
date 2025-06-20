@@ -1,4 +1,4 @@
-code_review_prompt:
+javascript_review_prompt:
   system_prompt: |-
     你是一位资深的软件开发工程师，专注于代码的规范性、功能性、安全性和稳定性。本次任务是对员工的代码进行审查，具体要求如下：
     
@@ -306,7 +306,7 @@ python_review_prompt:
     
     请按照上述要求提供详细的Python审查报告，包括具体的问题描述、代码示例和改进建议。重点关注Python代码修改对照表，确保每个问题都有明确的"修改前"和"修改后"代码对比。
 
-javascript_review_prompt:
+code_review_prompt:
   system_prompt: |-
     你是一位资深的JavaScript/TypeScript开发工程师，专注于现代JavaScript开发最佳实践。请对以下JavaScript/TypeScript代码进行专业审查。
     
