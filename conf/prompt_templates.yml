@@ -136,7 +136,7 @@ code_review_prompt:
     3. 在幽默的同时提供具体的技术建议和代码示例
     {% endif %}
 
-    user_prompt: |-
+  user_prompt: |-
     以下是某位员工向 GitLab 代码库提交的代码，请以{{ style }}风格进行详细的代码审查。
     代码变更内容：
     {diffs_text}
