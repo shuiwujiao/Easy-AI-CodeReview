@@ -185,7 +185,7 @@ class CodeReviewer(BaseReviewer):
     def _get_appropriate_prompt(self, diffs_text: str) -> str:
         """根据代码内容选择合适的提示词"""
         detected_lang = self._detect_language_from_diff(diffs_text)
-        prompt_key = self.language_prompts.get(detected_lang, 'code_review_prompt')
+        prompt_key = self.language_prompts.get(detected_lang, 'vue3_review_prompt')
         
         # 添加详细的调试日志
         logger.info(f"语言检测结果: {detected_lang}")
@@ -352,7 +352,7 @@ class CodeReviewer(BaseReviewer):
                 detected_lang = self._detect_language_from_changes(changes_data)
                 logger.info(f"从changes数据中检测到的语言: {detected_lang}")
         
-        prompt_key = self.language_prompts.get(detected_lang, 'code_review_prompt')
+        prompt_key = self.language_prompts.get(detected_lang, 'vue3_review_prompt')
         style = os.getenv("REVIEW_STYLE", "professional")
         
         logger.info(f"检测到的语言对应的提示词: {prompt_key}")
