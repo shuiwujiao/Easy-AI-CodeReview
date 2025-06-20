@@ -149,6 +149,22 @@ class CodeReviewer(BaseReviewer):
             ]):
                 language_counts['vue'] = 1
                 logger.info("通过内容检测到Vue文件")
+            
+            # 检查JavaScript特征
+            elif any(indicator in diffs_text.lower() for indicator in [
+                'function', 'var ', 'let ', 'const ', '=>', 'prompt(', 'alert(',
+                'console.log', 'document.', 'window.', 'addEventListener'
+            ]):
+                language_counts['javascript'] = 1
+                logger.info("通过内容检测到JavaScript代码")
+            
+            # 检查Python特征
+            elif any(indicator in diffs_text.lower() for indicator in [
+                'def ', 'import ', 'from ', 'class ', 'if __name__', 'print(',
+                'self.', 'return ', 'try:', 'except:', 'with open('
+            ]):
+                language_counts['python'] = 1
+                logger.info("通过内容检测到Python代码")
         
         # 返回出现最多的语言，如果没有检测到则返回默认
         if language_counts:
@@ -259,14 +275,18 @@ class CodeReviewer(BaseReviewer):
         
         return "\n".join(diff_content)
 
-    def review_and_strip_code(self, changes_text: str, commits_text: str = "") -> str:
+    def review_and_strip_code(self, changes_text: str, commits_text: str = "", changes_data: list = None) -> str:
         """
         Review判断changes_text超出取前REVIEW_MAX_TOKENS个token，超出则截断changes_text，
         调用review_code方法，返回review_result，如果review_result是markdown格式，则去掉头尾的```
         :param changes_text: 可以是字符串或列表格式的changes
         :param commits_text:
+        :param changes_data: 原始的changes数据，用于语言检测
         :return:
         """
+        # 保存原始的changes数据用于语言检测
+        original_changes_data = changes_data
+        
         # 如果changes_text是列表格式，转换为diff格式
         if isinstance(changes_text, list):
             changes_text = self._convert_changes_to_diff_format(changes_text)
@@ -282,6 +302,12 @@ class CodeReviewer(BaseReviewer):
         # 在截断之前先进行语言检测，确保能正确识别文件类型
         detected_language = self._detect_language_from_diff(changes_text)
         logger.info(f"在截断前检测到的语言: {detected_language}")
+        
+        # 如果从diff中检测失败，尝试从changes数据中检测
+        if detected_language == 'default' and original_changes_data:
+            logger.info("从diff中检测语言失败，尝试从changes数据中检测")
+            detected_language = self._detect_language_from_changes(original_changes_data)
+            logger.info(f"从changes数据中检测到的语言: {detected_language}")
         
         # 如果超长，取前REVIEW_MAX_TOKENS个token
         review_max_tokens = int(os.getenv("REVIEW_MAX_TOKENS", 10000))
@@ -303,12 +329,12 @@ class CodeReviewer(BaseReviewer):
         else:
             final_language = detected_language
 
-        review_result = self.review_code(changes_text, commits_text, final_language).strip()
+        review_result = self.review_code(changes_text, commits_text, final_language, original_changes_data).strip()
         if review_result.startswith("```markdown") and review_result.endswith("```"):
             return review_result[11:-3].strip()
         return review_result
 
-    def review_code(self, diffs_text: str, commits_text: str = "", pre_detected_language: str = None) -> str:
+    def review_code(self, diffs_text: str, commits_text: str = "", pre_detected_language: str = None, changes_data: list = None) -> str:
         """Review 代码并返回结果"""
         # 智能选择提示词
         if pre_detected_language and pre_detected_language != 'default':
@@ -319,6 +345,12 @@ class CodeReviewer(BaseReviewer):
             # 重新检测语言
             detected_lang = self._detect_language_from_diff(diffs_text)
             logger.info(f"重新检测到的语言: {detected_lang}")
+            
+            # 如果从diff中检测失败，尝试从changes数据中检测
+            if detected_lang == 'default' and changes_data:
+                logger.info("从diff中检测语言失败，尝试从changes数据中检测")
+                detected_lang = self._detect_language_from_changes(changes_data)
+                logger.info(f"从changes数据中检测到的语言: {detected_lang}")
         
         prompt_key = self.language_prompts.get(detected_lang, 'code_review_prompt')
         style = os.getenv("REVIEW_STYLE", "professional")
@@ -354,6 +386,47 @@ class CodeReviewer(BaseReviewer):
             },
         ]
         return self.call_llm(messages)
+
+    def _detect_language_from_changes(self, changes_data: list) -> str:
+        """从changes数据中检测主要编程语言"""
+        file_extensions = {
+            '.py': 'python',
+            '.js': 'javascript',
+            '.ts': 'typescript',
+            '.jsx': 'javascript',
+            '.tsx': 'typescript',
+            '.vue': 'vue',
+            '.java': 'java',
+            '.go': 'go',
+            '.php': 'php',
+            '.cpp': 'cpp',
+            '.cc': 'cpp',
+            '.cxx': 'cpp',
+            '.c': 'c',
+            '.h': 'cpp',
+            '.hpp': 'cpp',
+        }
+        
+        language_counts = {}
+        
+        for change in changes_data:
+            if isinstance(change, dict):
+                # 尝试从new_path获取文件路径
+                file_path = change.get('new_path') or change.get('old_path')
+                if file_path:
+                    ext = os.path.splitext(file_path)[1].lower()
+                    if ext in file_extensions:
+                        lang = file_extensions[ext]
+                        language_counts[lang] = language_counts.get(lang, 0) + 1
+                        logger.info(f"从changes数据检测到文件: {file_path}, 扩展名: {ext}, 语言: {lang}")
+        
+        if language_counts:
+            primary_language = max(language_counts, key=language_counts.get)
+            logger.info(f"从changes数据检测到主要编程语言: {primary_language}")
+            return primary_language
+        
+        logger.info("从changes数据中未检测到特定编程语言")
+        return 'default'
 
     @staticmethod
     def parse_review_score(review_text: str) -> int:
