@@ -8,7 +8,7 @@ log/*
 data/*
 !data/.gitkeep
 
-conf/.env
+# conf/.env
 .pyc
 __pycache__/
 .cursorignore
