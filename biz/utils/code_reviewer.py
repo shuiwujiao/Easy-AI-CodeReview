@@ -169,7 +169,19 @@ class CodeReviewer(BaseReviewer):
     def _get_appropriate_prompt(self, diffs_text: str) -> str:
         """根据代码内容选择合适的提示词"""
         detected_lang = self._detect_language_from_diff(diffs_text)
-        return self.language_prompts.get(detected_lang, 'code_review_prompt')
+        prompt_key = self.language_prompts.get(detected_lang, 'code_review_prompt')
+        
+        # 添加详细的调试日志
+        logger.info(f"语言检测结果: {detected_lang}")
+        logger.info(f"语言映射: {detected_lang} -> {prompt_key}")
+        logger.info(f"可用的语言映射: {self.language_prompts}")
+        
+        # 临时修复：强制Vue文件使用Vue3提示词
+        if detected_lang == 'vue':
+            logger.info("检测到Vue文件，强制使用vue3_review_prompt")
+            return 'vue3_review_prompt'
+        
+        return prompt_key
 
     def _load_language_specific_prompts(self, prompt_key: str, style="professional") -> Dict[str, Any]:
         """加载语言特定的提示词配置"""
