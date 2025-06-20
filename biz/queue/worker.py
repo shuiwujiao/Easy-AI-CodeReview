@@ -37,7 +37,7 @@ def handle_push_event(webhook_data: dict, gitlab_token: str, gitlab_url: str, gi
 
             if len(changes) > 0:
                 commits_text = ';'.join(commit.get('message', '').strip() for commit in commits)
-                review_result = CodeReviewer().review_and_strip_code(str(changes), commits_text)
+                review_result = CodeReviewer().review_and_strip_code(changes, commits_text)
                 score = CodeReviewer.parse_review_score(review_text=review_result)
                 for item in changes:
                     additions += item['additions']
@@ -111,7 +111,7 @@ def handle_merge_request_event(webhook_data: dict, gitlab_token: str, gitlab_url
 
         # review 代码
         commits_text = ';'.join(commit['title'] for commit in commits)
-        review_result = CodeReviewer().review_and_strip_code(str(changes), commits_text)
+        review_result = CodeReviewer().review_and_strip_code(changes, commits_text)
 
         # 将review结果提交到Gitlab的 notes
         handler.add_merge_request_notes(f'Auto Review Result: \n{review_result}')
@@ -165,7 +165,7 @@ def handle_github_push_event(webhook_data: dict, github_token: str, github_url: 
 
             if len(changes) > 0:
                 commits_text = ';'.join(commit.get('message', '').strip() for commit in commits)
-                review_result = CodeReviewer().review_and_strip_code(str(changes), commits_text)
+                review_result = CodeReviewer().review_and_strip_code(changes, commits_text)
                 score = CodeReviewer.parse_review_score(review_text=review_result)
                 for item in changes:
                     additions += item.get('additions', 0)
@@ -239,7 +239,7 @@ def handle_github_pull_request_event(webhook_data: dict, github_token: str, gith
 
         # review 代码
         commits_text = ';'.join(commit['title'] for commit in commits)
-        review_result = CodeReviewer().review_and_strip_code(str(changes), commits_text)
+        review_result = CodeReviewer().review_and_strip_code(changes, commits_text)
 
         # 将review结果提交到GitHub的 notes
         handler.add_pull_request_notes(f'Auto Review Result: \n{review_result}')
