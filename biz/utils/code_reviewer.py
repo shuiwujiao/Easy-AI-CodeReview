@@ -274,27 +274,53 @@ class CodeReviewer(BaseReviewer):
             # 处理其他可迭代对象
             changes_text = self._convert_changes_to_diff_format(list(changes_text))
         
-        # 如果超长，取前REVIEW_MAX_TOKENS个token
-        review_max_tokens = int(os.getenv("REVIEW_MAX_TOKENS", 10000))
         # 如果changes为空,打印日志
         if not changes_text:
             logger.info("代码为空, diffs_text = %", str(changes_text))
             return "代码为空"
 
+        # 在截断之前先进行语言检测，确保能正确识别文件类型
+        detected_language = self._detect_language_from_diff(changes_text)
+        logger.info(f"在截断前检测到的语言: {detected_language}")
+        
+        # 如果超长，取前REVIEW_MAX_TOKENS个token
+        review_max_tokens = int(os.getenv("REVIEW_MAX_TOKENS", 10000))
+        
         # 计算tokens数量，如果超过REVIEW_MAX_TOKENS，截断changes_text
         tokens_count = count_tokens(changes_text)
         if tokens_count > review_max_tokens:
+            logger.info(f"代码过长，从 {tokens_count} tokens 截断到 {review_max_tokens} tokens")
             changes_text = truncate_text_by_tokens(changes_text, review_max_tokens)
+            # 截断后再次检测语言，以防截断破坏了文件路径信息
+            truncated_language = self._detect_language_from_diff(changes_text)
+            logger.info(f"截断后检测到的语言: {truncated_language}")
+            # 如果截断后检测不到语言，使用截断前的检测结果
+            if truncated_language == 'default' and detected_language != 'default':
+                logger.info(f"截断后语言检测失败，使用截断前的检测结果: {detected_language}")
+                final_language = detected_language
+            else:
+                final_language = truncated_language
+        else:
+            final_language = detected_language
 
-        review_result = self.review_code(changes_text, commits_text).strip()
+        review_result = self.review_code(changes_text, commits_text, final_language).strip()
         if review_result.startswith("```markdown") and review_result.endswith("```"):
             return review_result[11:-3].strip()
         return review_result
 
-    def review_code(self, diffs_text: str, commits_text: str = "") -> str:
+    def review_code(self, diffs_text: str, commits_text: str = "", pre_detected_language: str = None) -> str:
         """Review 代码并返回结果"""
         # 智能选择提示词
-        prompt_key = self._get_appropriate_prompt(diffs_text)
+        if pre_detected_language and pre_detected_language != 'default':
+            # 使用预先检测到的语言
+            detected_lang = pre_detected_language
+            logger.info(f"使用预先检测到的语言: {detected_lang}")
+        else:
+            # 重新检测语言
+            detected_lang = self._detect_language_from_diff(diffs_text)
+            logger.info(f"重新检测到的语言: {detected_lang}")
+        
+        prompt_key = self.language_prompts.get(detected_lang, 'code_review_prompt')
         style = os.getenv("REVIEW_STYLE", "professional")
         
         logger.info(f"检测到的语言对应的提示词: {prompt_key}")
