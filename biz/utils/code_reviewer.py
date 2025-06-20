@@ -99,38 +99,56 @@ class CodeReviewer(BaseReviewer):
         
         # 统计各种语言的文件数量
         language_counts = {}
-        
-        # 从diff中提取文件路径和内容
-        file_pattern = r'^\+\+\+ b/(.+)$'
         vue3_indicators = 0
         
+        # 尝试多种文件路径模式
+        file_patterns = [
+            r'^\+\+\+ b/(.+)$',  # Git diff格式: +++ b/file.vue
+            r'^\+\+\+ (.+)$',    # 简化格式: +++ file.vue
+            r'^--- a/(.+)$',     # Git diff格式: --- a/file.vue
+            r'^--- (.+)$',       # 简化格式: --- file.vue
+            r'^diff --git a/(.+) b/(.+)$',  # Git diff格式: diff --git a/file.vue b/file.vue
+        ]
+        
         for line in diffs_text.split('\n'):
-            match = re.search(file_pattern, line)
-            if match:
-                file_path = match.group(1)
+            # 尝试所有文件路径模式
+            file_path = None
+            for pattern in file_patterns:
+                match = re.search(pattern, line)
+                if match:
+                    if pattern == r'^diff --git a/(.+) b/(.+)$':
+                        # 对于diff --git格式，取第一个文件路径
+                        file_path = match.group(1)
+                    else:
+                        file_path = match.group(1)
+                    break
+            
+            if file_path:
                 # 获取文件扩展名
                 ext = os.path.splitext(file_path)[1].lower()
                 if ext in file_extensions:
                     lang = file_extensions[ext]
                     language_counts[lang] = language_counts.get(lang, 0) + 1
-                    
-                    # 如果是Vue文件，进一步检测是否为Vue3
-                    if lang == 'vue':
-                        # 检查Vue3特有的语法特征
-                        if any(indicator in diffs_text.lower() for indicator in [
-                            'setup()', 'defineprops', 'defineemits', 'ref(', 'reactive(',
-                            'computed(', 'watch(', 'onmounted', 'onunmounted',
-                            'composition api', 'script setup', '<script setup'
-                        ]):
-                            vue3_indicators += 1
+                    logger.info(f"检测到文件: {file_path}, 扩展名: {ext}, 语言: {lang}")
             
             # 检查代码内容中的Vue3特征
-            if any(indicator in line.lower() for indicator in [
+            line_lower = line.lower()
+            if any(indicator in line_lower for indicator in [
                 'setup()', 'defineprops', 'defineemits', 'ref(', 'reactive(',
                 'computed(', 'watch(', 'onmounted', 'onunmounted',
                 'composition api', 'script setup', '<script setup'
             ]):
                 vue3_indicators += 1
+                logger.info(f"检测到Vue3特征: {line.strip()}")
+        
+        # 如果没有通过文件路径检测到语言，尝试从内容中检测
+        if not language_counts:
+            # 检查是否包含Vue相关的内容
+            if any(indicator in diffs_text.lower() for indicator in [
+                '<template>', '<script>', '<style>', 'vue', '.vue'
+            ]):
+                language_counts['vue'] = 1
+                logger.info("通过内容检测到Vue文件")
         
         # 返回出现最多的语言，如果没有检测到则返回默认
         if language_counts:
@@ -139,6 +157,8 @@ class CodeReviewer(BaseReviewer):
             # 如果是Vue且有Vue3特征，记录日志
             if primary_language == 'vue' and vue3_indicators > 0:
                 logger.info(f"检测到Vue3代码，Vue3特征数量: {vue3_indicators}")
+            elif primary_language == 'vue':
+                logger.info(f"检测到Vue文件，但未发现Vue3特征，Vue3特征数量: {vue3_indicators}")
             
             logger.info(f"检测到主要编程语言: {primary_language}")
             return primary_language
@@ -194,14 +214,50 @@ class CodeReviewer(BaseReviewer):
             logger.error(f"加载通用提示词配置失败: {e}")
             raise Exception(f"提示词配置加载失败: {e}")
 
+    def _convert_changes_to_diff_format(self, changes: list) -> str:
+        """将changes列表转换为标准的diff格式"""
+        if not changes:
+            return ""
+        
+        diff_content = []
+        for change in changes:
+            # 处理不同的change格式
+            if isinstance(change, dict):
+                # GitLab API返回的格式
+                if 'diff' in change:
+                    diff_content.append(change['diff'])
+                elif 'new_path' in change and 'old_path' in change:
+                    # 构建简单的diff格式
+                    diff_content.append(f"diff --git a/{change['old_path']} b/{change['new_path']}")
+                    if 'new_file' in change and change['new_file']:
+                        diff_content.append(f"new file mode 100644")
+                    elif 'deleted_file' in change and change['deleted_file']:
+                        diff_content.append(f"deleted file mode 100644")
+                    diff_content.append(f"--- a/{change['old_path']}")
+                    diff_content.append(f"+++ b/{change['new_path']}")
+                    if 'diff' in change:
+                        diff_content.append(change['diff'])
+            elif isinstance(change, str):
+                # 如果已经是字符串格式，直接添加
+                diff_content.append(change)
+        
+        return "\n".join(diff_content)
+
     def review_and_strip_code(self, changes_text: str, commits_text: str = "") -> str:
         """
         Review判断changes_text超出取前REVIEW_MAX_TOKENS个token，超出则截断changes_text，
         调用review_code方法，返回review_result，如果review_result是markdown格式，则去掉头尾的```
-        :param changes_text:
+        :param changes_text: 可以是字符串或列表格式的changes
         :param commits_text:
         :return:
         """
+        # 如果changes_text是列表格式，转换为diff格式
+        if isinstance(changes_text, list):
+            changes_text = self._convert_changes_to_diff_format(changes_text)
+        elif hasattr(changes_text, '__iter__') and not isinstance(changes_text, str):
+            # 处理其他可迭代对象
+            changes_text = self._convert_changes_to_diff_format(list(changes_text))
+        
         # 如果超长，取前REVIEW_MAX_TOKENS个token
         review_max_tokens = int(os.getenv("REVIEW_MAX_TOKENS", 10000))
         # 如果changes为空,打印日志
