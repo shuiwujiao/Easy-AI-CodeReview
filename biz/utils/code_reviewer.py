@@ -58,7 +58,8 @@ class CodeReviewer(BaseReviewer):
     """代码 Diff 级别的审查"""
 
     def __init__(self):
-        super().__init__("code_review_prompt")
+        # 不预加载通用提示词，而是动态加载
+        self.client = Factory().getClient()
         # 语言到提示词映射
         self.language_prompts = {
             'python': 'python_review_prompt',
@@ -170,7 +171,28 @@ class CodeReviewer(BaseReviewer):
         except (FileNotFoundError, KeyError, yaml.YAMLError) as e:
             logger.error(f"加载语言特定提示词配置失败: {e}")
             # 如果加载失败，回退到通用提示词
-            return self._load_prompts("code_review_prompt", style)
+            return self._load_fallback_prompts(style)
+
+    def _load_fallback_prompts(self, style="professional") -> Dict[str, Any]:
+        """加载通用提示词作为回退"""
+        prompt_templates_file = "conf/prompt_templates.yml"
+        try:
+            with open(prompt_templates_file, "r", encoding="utf-8") as file:
+                prompts = yaml.safe_load(file).get("code_review_prompt", {})
+
+                def render_template(template_str: str) -> str:
+                    return Template(template_str).render(style=style)
+
+                system_prompt = render_template(prompts["system_prompt"])
+                user_prompt = render_template(prompts["user_prompt"])
+
+                return {
+                    "system_message": {"role": "system", "content": system_prompt},
+                    "user_message": {"role": "user", "content": user_prompt},
+                }
+        except (FileNotFoundError, KeyError, yaml.YAMLError) as e:
+            logger.error(f"加载通用提示词配置失败: {e}")
+            raise Exception(f"提示词配置加载失败: {e}")
 
     def review_and_strip_code(self, changes_text: str, commits_text: str = "") -> str:
         """
@@ -203,11 +225,16 @@ class CodeReviewer(BaseReviewer):
         prompt_key = self._get_appropriate_prompt(diffs_text)
         style = os.getenv("REVIEW_STYLE", "professional")
         
+        logger.info(f"检测到的语言对应的提示词: {prompt_key}")
+        logger.info(f"当前审查风格: {style}")
+        
         # 加载对应的提示词
         if prompt_key != "code_review_prompt":
+            logger.info(f"使用语言特定提示词: {prompt_key}")
             prompts = self._load_language_specific_prompts(prompt_key, style)
         else:
-            prompts = self.prompts
+            logger.info("使用通用提示词: code_review_prompt")
+            prompts = self._load_fallback_prompts(style)
         
         messages = [
             prompts["system_message"],
