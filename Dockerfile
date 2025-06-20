@@ -10,8 +10,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends supervisor && r
 # 复制项目文件&创建必要的文件夹
 COPY requirements.txt .
 
-# 安装依赖
-RUN pip install --no-cache-dir -r requirements.txt
+# 使用国内镜像源安装依赖，增加超时时间和重试机制
+RUN pip install --no-cache-dir --timeout 300 --retries 3 -i https://pypi.tuna.tsinghua.edu.cn/simple/ -r requirements.txt
 
 RUN mkdir -p log data conf
 COPY biz ./biz
