@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Union
 
 from biz.llm.types import NotGiven, NOT_GIVEN
 from biz.utils.log import logger
@@ -20,7 +20,7 @@ class BaseClient:
     @abstractmethod
     def completions(self,
                     messages: List[Dict[str, str]],
-                    model: Optional[str] | NotGiven = NOT_GIVEN,
+                    model: Union[Optional[str], NotGiven] = NOT_GIVEN,
                     ) -> str:
         """Chat with the model.
         """

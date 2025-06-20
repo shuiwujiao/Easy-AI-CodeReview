@@ -1,13 +1,17 @@
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from openai import OpenAI
 
 from biz.llm.client.base import BaseClient
 from biz.llm.types import NotGiven, NOT_GIVEN
+from biz.utils.log import logger
+import openai
 
 
 class OpenAIClient(BaseClient):
+    """OpenAI client for chat models."""
+
     def __init__(self, api_key: str = None):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self.base_url = os.getenv("OPENAI_API_BASE_URL", "https://api.openai.com")
@@ -19,7 +23,7 @@ class OpenAIClient(BaseClient):
 
     def completions(self,
                     messages: List[Dict[str, str]],
-                    model: Optional[str] | NotGiven = NOT_GIVEN,
+                    model: Union[Optional[str], NotGiven] = NOT_GIVEN,
                     ) -> str:
         model = model or self.default_model
         completion = self.client.chat.completions.create(
