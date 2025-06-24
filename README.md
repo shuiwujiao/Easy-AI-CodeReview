@@ -6,35 +6,97 @@
 
 ## 功能
 
-- 🚀 多模型支持
-  - 兼容 DeepSeek、ZhipuAI、OpenAI、通义千问 和 Ollama，想用哪个就用哪个。
-- 📢 消息即时推送
-  - 审查结果一键直达 钉钉、企业微信 或 飞书，代码问题无处可藏！
-- 📅 自动化日报生成
-  - 基于 GitLab & GitHub Commit 记录，自动整理每日开发进展，谁在摸鱼、谁在卷，一目了然 😼。
-- 📊 可视化 Dashboard
-  - 集中展示所有 Code Review 记录，项目统计、开发者统计，数据说话，甩锅无门！
-- 🎭 Review Style 任你选
-  - 专业型 🤵：严谨细致，正式专业。 
-  - 讽刺型 😈：毒舌吐槽，专治不服（"这代码是用脚写的吗？"） 
-  - 绅士型 🌸：温柔建议，如沐春风（"或许这里可以再优化一下呢~"） 
-  - 幽默型 🤪：搞笑点评，快乐改码（"这段 if-else 比我的相亲经历还曲折！"）
+- 🚀 多模型灵活切换
+  - 全面兼容 **DeepSeek、ZhipuAI、OpenAI、通义千问、Ollama** 想用哪个，用哪个！轻松上手，自由切换。
+- 📢 消息实时送达
+  - 审查结果 **一键推送** 到 **钉钉、企业微信、飞书**  及时响应，代码问题无所遁形！
+- 📅 自动生成开发日报
+  - 基于 **GitHub / GitLab Commit** 记录，自动梳理每日开发动态：  
+谁在认真敲代码，谁在划水，一清二楚 😼。
+- 📊 数据可视化 Dashboard
+  - 集中展示所有 **Code Review 记录**，提供清晰的：
+    - 项目整体统计  
+    - 成员贡献分析  
+  - 数据说话，甩锅无门！
+- 🎭 多种审查风格，任你挑！
+  | 风格 | 描述 | 示例 |
+  |------|------|------|
+  | 🤵 **专业型** | 严谨细致、正式专业 | *建议优化此函数的命名，以提升可读性。* |
+  | 😈 **毒舌型** | 毒舌吐槽、直击要害 | *你确定这是人能读的代码？* |
+  | 🌸 **绅士型** | 温柔委婉、如沐春风 | *或许这里可以再优化一下呢~* |
+  | 🤪 **幽默型** | 搞笑风趣、快乐改码 | *这段 if-else 比我相亲经历还复杂！* |
+
 
 **效果图:**
 
-![MR图片](./doc/img/mr.png)
+![MR图片](./doc/img/push_example.png)
 
-![Note图片](./doc/img/note.jpg)
+![Note图片](./doc/img/push_note.png)
 
-![Dashboard图片](./doc/img/dashboard.jpg)
+<!-- ![Dashboard图片](./doc/img/dashboard.jpg) -->
 
 ## 原理
 
-当用户在 GitLab 上提交代码（如 Merge Request 或 Push 操作）时，GitLab 将自动触发 webhook
-事件，调用本系统的接口。系统随后通过第三方大模型对代码进行审查，并将审查结果直接反馈到对应的 Merge Request 或 Commit 的
-Note 中，便于团队查看和处理。
+在开发者向 GitLab 提交代码（包括 Merge Request 创建或 Push 操作）时，GitLab 会根据预设的 Webhook 配置触发回调请求，调用本系统提供的接口。系统接收到事件后，将解析提交内容，并通过集成的第三方大语言模型对代码变更进行静态审查。
 
-![流程图](./doc/img/process.png)
+审查内容包括但不限于：代码规范检查、潜在错误识别、安全风险分析及可维护性建议。完成审查后，系统会将结果以评论的形式自动回写至对应的 Merge Request 或 Commit 页面，确保审查反馈能够实时集成至开发工作流中，从而提升代码质量与团队协作效率。
+
+**流程图**
+```mermaid
+flowchart TD
+    A["🎯 GitLab"] --> B["🌐 Webhook API Call"]
+    B --> C{"📂 类型判断<br/>Type = ?"}
+    
+    %% Merge Request 流程
+    C -- "merge request" --> D["📌 处理合并请求<br/>handle_merge_request"]
+    D --> E{"⚙️ 操作类型？<br/>action = open / update?"}
+    E -- "是" --> F["🧾 获取代码变更<br/>obtain code changes"]
+    F --> G["🤖 大模型 Review<br/>LLM review"]
+    G --> H1["📤 发送代码审核 IM<br/>Send CR IM message"]
+    
+    %% Push 流程
+    C -- "push" --> I["📌 处理 Push 请求<br/>handle_push_request"]
+    I --> J["📝 记录日志<br/>log push"]
+    J --> K{"🛠️ 启用 Push Review？<br/>push review enabled?"}
+    K -- "否" --> L["📤 发送 IM 通知<br/>Send IM notice"]
+    K -- "是" --> M["🤖 大模型 Review<br/>LLM review"]
+    M --> H2["📤 发送代码审核 IM<br/>Send CR IM message"]
+
+    %% 定时任务流程
+    Z["⏰ 定时任务触发<br/>Scheduled Timer"] --> P["📂 读取日志<br/>Read logs"]
+    P --> Q["🧠 大模型总结<br/>LLM summary"]
+    Q --> H3["📤 发送 IM 日报<br/>Send IM report"]
+
+    %% 虚线提示：日志来源
+    J -.-> P
+
+    %% 样式统一应用，避免遗漏
+    style A fill:#2E86C1,stroke:#1B4F72,stroke-width:3px,color:#FFFFFF,font-weight:bold,font-size:18px
+    style B fill:#117A65,stroke:#0B5345,stroke-width:3px,color:#FFFFFF,font-weight:bold,font-size:16px
+    style C fill:#D68910,stroke:#9A6400,stroke-width:3px,color:#FFFFFF,font-weight:bold,font-size:16px
+
+    style D fill:#85C1E9,stroke:#2874A6,stroke-width:2px,color:#1B2631,font-weight:bold,font-size:14px
+    style E fill:#85C1E9,stroke:#2874A6,stroke-width:2px,color:#1B2631,font-weight:bold,font-size:14px
+    style F fill:#85C1E9,stroke:#2874A6,stroke-width:2px,color:#1B2631,font-weight:bold,font-size:14px
+    style G fill:#85C1E9,stroke:#2874A6,stroke-width:2px,color:#1B2631,font-weight:bold,font-size:14px
+
+    style I fill:#F7DC6F,stroke:#B7950B,stroke-width:2px,color:#5D4037,font-weight:bold,font-size:14px
+    style J fill:#F7DC6F,stroke:#B7950B,stroke-width:2px,color:#5D4037,font-weight:bold,font-size:14px
+    style K fill:#F7DC6F,stroke:#B7950B,stroke-width:2px,color:#5D4037,font-weight:bold,font-size:14px
+    style M fill:#F7DC6F,stroke:#B7950B,stroke-width:2px,color:#5D4037,font-weight:bold,font-size:14px
+
+    style P fill:#AED6F1,stroke:#2980B9,stroke-width:2px,color:#1B2631,font-weight:bold,font-size:14px
+    style Q fill:#AED6F1,stroke:#2980B9,stroke-width:2px,color:#1B2631,font-weight:bold,font-size:14px
+
+    style H1 fill:#27AE60,stroke:#145A32,stroke-width:3px,color:#ECF0F1,font-weight:bold,font-size:15px
+    style H2 fill:#27AE60,stroke:#145A32,stroke-width:3px,color:#ECF0F1,font-weight:bold,font-size:15px
+    style H3 fill:#27AE60,stroke:#145A32,stroke-width:3px,color:#ECF0F1,font-weight:bold,font-size:15px
+
+    style L fill:#E74C3C,stroke:#922B21,stroke-width:2px,color:#FFFFFF,font-weight:bold,font-size:14px
+
+    style Z fill:#BB8FCE,stroke:#6C3483,stroke-width:3px,color:#FFFFFF,font-weight:bold,font-size:16px
+
+```
 
 ## 部署
 
@@ -44,8 +106,8 @@ Note 中，便于团队查看和处理。
 
 - 克隆项目仓库：
 ```aiignore
-git clone https://github.com/sunmh207/AI-Codereview-Gitlab.git
-cd AI-Codereview-Gitlab
+git clone https://github.com/spherical-up/Easy-AI-CodeReview
+cd Easy-AI-CodeReview
 ```
 
 - 创建配置文件：
