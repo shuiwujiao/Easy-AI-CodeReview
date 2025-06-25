@@ -29,10 +29,11 @@
 
 **效果图:**
 
-![MR图片](./doc/img/push_example.png)
+![Push图片](./doc/img/push_example.png)
 
-![Note图片](./doc/img/push_note.png)
+![Abstract图片](./doc/img/abstract.png)
 
+![Gitlab评论图片](./doc/img/comment.png)
 <!-- ![Dashboard图片](./doc/img/dashboard.jpg) -->
 
 ## 原理
