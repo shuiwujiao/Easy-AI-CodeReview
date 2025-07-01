@@ -156,7 +156,7 @@ docker-compose up -d
 **1. 获取源码**
 
 ```bash
-git clone https://github.com/sunmh207/AI-Codereview-Gitlab.git
+git clone https://github.com/spherical-up/Easy-AI-CodeReview
 cd AI-Codereview-Gitlab
 ```
 
