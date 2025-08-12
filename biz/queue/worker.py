@@ -84,7 +84,7 @@ def handle_merge_request_event(webhook_data: dict, gitlab_token: str, gitlab_url
             logger.info("Merge Request target branch not match protected branches, ignored.")
             return
 
-        if handler.action not in ['open', 'update']:
+        if handler.action not in ['opened', 'reopened', 'updated']:
             logger.info(f"Merge Request Hook event, action={handler.action}, ignored.")
             return
 

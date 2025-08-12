@@ -5,7 +5,7 @@ from biz.llm.client.deepseek import DeepSeekClient
 from biz.llm.client.ollama_client import OllamaClient
 from biz.llm.client.openai import OpenAIClient
 from biz.llm.client.qwen import QwenClient
-from biz.llm.client.zhipuai import ZhipuAIClient
+from biz.llm.client.zhipuai import ZhipuaiClient as ZhipuAIClient
 from biz.utils.log import logger
 
 

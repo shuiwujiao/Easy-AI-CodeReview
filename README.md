@@ -1,3 +1,14 @@
+## Modify content
+为了适配工作环境差异的需要，从
+- [Easy-AI-CodeReview](https://github.com/spherical-up/Easy-AI-CodeReview) fork了一份用于修改
+
+感谢原作者[spherical-up](https://github.com/spherical-up)开源，请支持原作者。
+
+### Modify
+1. gitlab v4 api中，较新版本的gitlab的MR的状态使用 `state: "opened", "reopened", "updated"`，项目中的判断条件进行同步修改
+
+## Easy-AI-CodeReview
+
 ![Push图片](./doc/img/ai-code.jpg)
 
 ## 项目简介
@@ -184,6 +195,13 @@ python api.py
 
 ```bash
 streamlit run ui.py --server.port=5002 --server.address=0.0.0.0
+```
+
+
+- 如果打开了防火墙，则先放通对应的端口：
+```bash
+firewall-cmd --zone=public --add-port=5002/tcp --permanent
+firewall-cmd --reload
 ```
 
 ### 配置 GitLab Webhook

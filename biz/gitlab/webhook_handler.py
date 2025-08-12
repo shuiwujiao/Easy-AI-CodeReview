@@ -71,7 +71,7 @@ class MergeRequestHandler:
         merge_request = self.webhook_data.get('object_attributes', {})
         self.merge_request_iid = merge_request.get('iid')
         self.project_id = merge_request.get('target_project_id')
-        self.action = merge_request.get('action')
+        self.action = merge_request.get('state')
 
     def get_merge_request_changes(self) -> list:
         # 检查是否为 Merge Request Hook 事件
@@ -87,7 +87,7 @@ class MergeRequestHandler:
             url = urljoin(f"{self.gitlab_url}/",
                           f"api/v4/projects/{self.project_id}/merge_requests/{self.merge_request_iid}/changes")
             headers = {
-                'Private-Token': self.gitlab_token
+                'PRIVATE-TOKEN': self.gitlab_token
             }
             response = requests.get(url, headers=headers, verify=False)
             logger.debug(
