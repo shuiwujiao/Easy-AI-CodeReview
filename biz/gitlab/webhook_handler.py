@@ -11,6 +11,7 @@ from biz.utils.log import logger
 def filter_changes(changes: list):
     '''
     过滤数据，只保留支持的文件类型以及必要的字段信息
+    diffs、changes接口返回的列表通用
     '''
     # 从环境变量中获取支持的文件扩展名
     supported_extensions = os.getenv('SUPPORTED_EXTENSIONS', '.java,.py,.php').split(',')
@@ -74,6 +75,11 @@ class MergeRequestHandler:
         self.action = merge_request.get('state')
 
     def get_merge_request_changes(self) -> list:
+        """
+        API: GET /projects/:id/merge_requests/:merge_request_iid/changes
+        API URL: https://docs.gitlab.com/api/merge_requests/#get-single-mr-diffs
+        WARN: This endpoint was deprecated in GitLab 15.7 and is scheduled for removal in API v5. Use the List merge request diffs endpoint instead.
+        """
         # 检查是否为 Merge Request Hook 事件
         if self.event_type != 'merge_request':
             logger.warn(f"Invalid event type: {self.event_type}. Only 'merge_request' event is supported now.")
@@ -108,6 +114,145 @@ class MergeRequestHandler:
 
         logger.warning(f"Max retries ({max_retries}) reached. Changes is still empty.")
         return []  # 达到最大重试次数后返回空列表
+
+    def get_merge_request_diffs(self) -> list:
+        """
+        原方法: get_merge_request_changes，相较于原方法修改了获取改动的gitlab api 为 /diffs
+        API: GET /projects/:id/merge_requests/:merge_request_iid/diffs
+        API URL: https://docs.gitlab.com/api/merge_requests/#get-single-mr-diffs
+        该API在Gitlab 11.5 引入，尚未排查为什么无法使用（初步排查是内部使用gitlab版本有bug）
+        """
+        # 检查是否为 Merge Request Hook 事件
+        if self.event_type != 'merge_request':
+            logger.warn(f"Invalid event type: {self.event_type}. Only 'merge_request' event is supported now.")
+            return []
+
+        # Gitlab merge request diffs API可能存在延迟，多次尝试
+        max_retries = 3  # 最大重试次数
+        retry_delay = 10  # 重试间隔时间（秒）
+        for attempt in range(max_retries):
+            # 调用 GitLab API 获取 Merge Request 的 diffs
+            url = urljoin(f"{self.gitlab_url}/",
+                          f"api/v4/projects/{self.project_id}/merge_requests/{self.merge_request_iid}/diffs")
+            headers = {
+                'PRIVATE-TOKEN': self.gitlab_token
+            }
+            response = requests.get(url, headers=headers, verify=False)
+            logger.debug(
+                f"Get diffs response from GitLab (attempt {attempt + 1}): {response.status_code}, {response.text}, URL: {url}")
+            # 检查请求是否成功
+            if response.status_code == 200:
+                diffs = response.json()
+                if diffs:
+                    return diffs
+                else:
+                    logger.info(
+                        f"diffs is empty, retrying in {retry_delay} seconds... (attempt {attempt + 1}/{max_retries}), URL: {url}")
+                    time.sleep(retry_delay)
+            else:
+                logger.warn(f"Failed to get diffs from GitLab (URL: {url}): {response.status_code}, {response.text}")
+                return []
+
+        logger.warning(f"Max retries ({max_retries}) reached. diffs is still empty.")
+        return []  # 达到最大重试次数后返回空列表
+
+    def get_merge_request_diffs_from_base_sha_to_head_sha(self) -> list:
+        """
+        原方法: get_merge_request_changes，由于diffs接口内网有问题，所以使用了替代方案
+        注意：该方案的性能待验证，评审阶段提出该接口存在性能问题，响应慢等
+        API: GET /projects/:id/merge_requests/:merge_request_iid/diffs
+        API URL: https://docs.gitlab.com/api/merge_requests/#get-single-mr-diffs
+        该API在Gitlab 11.5 引入，尚未排查为什么无法使用！！！
+
+        使用替代方法
+        """
+        # 检查是否为 Merge Request Hook 事件
+        if self.event_type != 'merge_request':
+            logger.warn(f"Invalid event type: {self.event_type}. Only 'merge_request' event is supported now.")
+            return []
+
+        # Gitlab merge request diffs API可能存在延迟，多次尝试
+        max_retries = 3  # 最大重试次数
+        retry_delay = 10  # 重试间隔时间（秒）
+        headers = {
+            'PRIVATE-TOKEN': self.gitlab_token
+        }
+        # 
+        # 1. 先获取MR详情 url，提取diff_refs
+        base_sha = ""
+        head_sha = ""
+        for attempt in range(max_retries):
+            try:
+                mr_detail_url = f"{self.gitlab_url}/api/v4/projects/{self.project_id}/merge_requests/{self.merge_request_iid}"
+                logger.info(f"第 {attempt+1}/{max_retries} 次请求MR详情: {mr_detail_url}")
+                mr_response = requests.get(mr_detail_url, headers=headers)
+                
+                mr_response.raise_for_status()  # 自动抛出4xx/5xx的HTTP异常
+                mr_detail = mr_response.json()
+                
+                diff_refs = mr_detail.get("diff_refs", {})
+                base_sha = diff_refs.get("base_sha")
+                head_sha = diff_refs.get("head_sha")
+                
+                if not base_sha or not head_sha:
+                    logger.warning(f"MR #{self.merge_request_iid} 缺少diff_refs信息，尝试重试")
+                    # 不是致命错误，允许重试
+                    if attempt < max_retries - 1:  # 不是最后一次尝试
+                        time.sleep(2 **attempt)  # 指数退避延迟
+                        continue
+                
+                # 成功获取数据，跳出循环
+                break
+                
+            except requests.exceptions.HTTPError as e:
+                # 区分HTTP错误类型，决定是否重试
+                status_code = mr_response.status_code
+                logger.error(f"HTTP错误: {status_code}, 详情: {e}")
+                if status_code >= 500 or status_code == 429:  # 服务器错误或限流，需要重试
+                    if attempt < max_retries - 1:
+                        time.sleep(2** attempt)
+                        continue
+                # 4xx客户端错误（如404）无需重试，直接抛出
+                # raise Exception(f"获取MR详情失败，HTTP状态码: {status_code}") from e
+                return []
+            except Exception as e:
+                # 其他未知错误（如网络超时），尝试重试
+                logger.error(f"请求MR详情时发生未知错误: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(2 **attempt)
+                    continue
+                return []
+
+        # 循环结束后检查是否获取到有效数据
+        if not base_sha or not head_sha:
+            logger.error(f"达到最大重试次数，仍未获取到MR #{self.merge_request_iid} 的base_sha或head_sha")
+            return []
+
+        # 2. 根据获取的 mr 信息，通过 sha 获取完整的 diffs 内容
+        for attempt in range(max_retries):
+            # 调用 GitLab API 获取 Merge Request 的 diffs
+            url = urljoin(f"{self.gitlab_url}/",
+                          f"api/v4/projects/{self.project_id}/repository/compare?from={base_sha}&to={head_sha}")
+            response = requests.get(url, headers=headers, verify=False)
+            logger.debug(
+                f"Get diffs response from GitLab (attempt {attempt + 1}): {response.status_code}, {response.text}, URL: {url}")
+
+            # 检查请求是否成功
+            if response.status_code == 200:
+                diffs = response.json().get('diffs', [])
+                if diffs:
+                    return diffs
+                else:
+                    logger.info(
+                        f"diffs is empty, retrying in {retry_delay} seconds... (attempt {attempt + 1}/{max_retries}), URL: {url}")
+                    time.sleep(retry_delay)
+            else:
+                logger.warn(f"Failed to get diffs from GitLab (URL: {url}): {response.status_code}, {response.text}")
+                return []
+
+        logger.warning(f"Max retries ({max_retries}) reached. diffs is still empty.")
+        return []  # 达到最大重试次数后返回空列表
+
 
     def get_merge_request_commits(self) -> list:
         # 检查是否为 Merge Request Hook 事件

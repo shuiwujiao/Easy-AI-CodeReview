@@ -84,22 +84,25 @@ def handle_merge_request_event(webhook_data: dict, gitlab_token: str, gitlab_url
             logger.info("Merge Request target branch not match protected branches, ignored.")
             return
 
-        if handler.action not in ['opened', 'reopened', 'updated']:
+        # 'updated' 状态的 MR 也先不处理，否则会重复review和评论
+        if handler.action not in ['opened', 'reopened']:
             logger.info(f"Merge Request Hook event, action={handler.action}, ignored.")
             return
 
         # 仅仅在MR创建或更新时进行Code Review
-        # 获取Merge Request的changes
-        changes = handler.get_merge_request_changes()
-        logger.info('changes: %s', changes)
-        changes = filter_changes(changes)
-        if not changes:
+        # 获取Merge Request的changes -> GitLab 15.7 废弃changes接口，直接使用diffs接口
+        # diffs 在内网环境有点问题，获取不到数据，未查明根因，使用 get_merge_request_diffs_from_base_sha_to_head_sha 替代
+        diffs = handler.get_merge_request_diffs_from_base_sha_to_head_sha()
+        logger.info('diffs: %s', diffs)
+        diffs_with_filter = filter_changes(diffs)
+        logger.info('diffs with filter: %s', diffs_with_filter)
+        if not diffs_with_filter:
             logger.info('未检测到有关代码的修改,修改文件可能不满足SUPPORTED_EXTENSIONS。')
             return
         # 统计本次新增、删除的代码总数
         additions = 0
         deletions = 0
-        for item in changes:
+        for item in diffs_with_filter:
             additions += item.get('additions', 0)
             deletions += item.get('deletions', 0)
 
@@ -111,7 +114,8 @@ def handle_merge_request_event(webhook_data: dict, gitlab_token: str, gitlab_url
 
         # review 代码
         commits_text = ';'.join(commit['title'] for commit in commits)
-        review_result = CodeReviewer().review_and_strip_code(changes, commits_text, changes)
+        logger.info('commits text: %s', commits_text)
+        review_result = CodeReviewer().review_and_strip_code(diffs_with_filter, commits_text, diffs)
 
         # 将review结果提交到Gitlab的 notes
         handler.add_merge_request_notes(f'Auto Review Result: \n{review_result}')

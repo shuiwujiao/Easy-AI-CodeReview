@@ -4,8 +4,20 @@
 
 感谢原作者[spherical-up](https://github.com/spherical-up)开源，请支持原作者。
 
-### Modify
+### 改动点
 1. gitlab v4 api中，较新版本的gitlab的MR的状态使用 `state: "opened", "reopened", "updated"`，项目中的判断条件进行同步修改
+2. 增加`.proto`、`.yml`文件的review提示词
+3. `/projects/:id/merge_requests/:merge_request_iid/changes` 接口gitlab后续会弃用，切换到`diffs`接口，但是内网gitlab版本似乎有bug，使用sha+compare接口替代diffs接口；不使用changes的原因是需要详细diffs信息，后续需要将comment添加到diff行（这个改动目前只改了 MR，后续Push的也需要修改）
+4. review的语料（进行中）：
+  当前：使用的是diffs + 提交信息，直接将diffs作为review的语料
+  修改：
+    方案一：使用单个diff（即单个文件的diff）/diffs（所有文件的diff，diffs接口返回的列表）作为review的语料（简单，但效果差，缺少上下文）
+    方案二：单个文件的diff + 文件内容作为语料，效果稍好
+    方案三：单个改动点的diff行 + 完整的单个文件的diff内容 + 文件内容（修改后使用的方案）
+    方案四：在方案三的基础上，引入完整仓库解析，缺点是算力要求过大，暂不进行，效果未验证
+
+### 代办
+1. Gitlab Push事件使用的changes接口需要修改
 
 ## Easy-AI-CodeReview
 
