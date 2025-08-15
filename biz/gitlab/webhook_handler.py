@@ -333,7 +333,7 @@ class MergeRequestHandler:
         for attempt in range(max_retries):
             # 调用 GitLab API 获取 Merge Request 的 diffs
             url = urljoin(f"{self.gitlab_url}/",
-                          f"api/v4/projects/{self.project_id}/repository/compare?from={sha["base_sha"]}&to={sha["head_sha"]}")
+                          f"api/v4/projects/{self.project_id}/repository/compare?from={sha['base_sha']}&to={sha['head_sha']}")
             response = requests.get(url, headers=headers, verify=False)
             logger.debug(
                 f"Get diffs response from GitLab (attempt {attempt + 1}): {response.status_code}, {response.text}, URL: {url}")
@@ -453,7 +453,7 @@ class MergeRequestHandler:
             return response.json()
         else:
             logger.error(f"向文件{new_path}的{old_line}~{new_line}行添加评论失败。状态码: {response.status_code}")
-            logger.error(f"请求信息：\n url: {url}\n header: Just Private-Token, dont print\n position: {payload["position"]}")
+            logger.error(f"请求信息：\n url: {url}\n header: Just Private-Token, dont print\n position: {payload['position']}")
             logger.error(f"响应内容: {response.text}")
             logger.warn("由于行内评论添加失败，使用原本的方式直接向MR提交评论")
             self.add_merge_request_notes(f"注意：本次行内评论由于异常原因未添加成功，请根据AICR查看对应的行：\n{content}")
