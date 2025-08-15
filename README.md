@@ -6,18 +6,64 @@
 
 ### 改动点
 1. gitlab v4 api中，较新版本的gitlab的MR的状态使用 `state: "opened", "reopened", "updated"`，项目中的判断条件进行同步修改
+
 2. 增加`.proto`、`.yml`文件的review提示词
-3. `/projects/:id/merge_requests/:merge_request_iid/changes` 接口gitlab后续会弃用，切换到`diffs`接口，但是内网gitlab版本似乎有bug，使用sha+compare接口替代diffs接口；不使用changes的原因是需要详细diffs信息，后续需要将comment添加到diff行（这个改动目前只改了 MR，后续Push的也需要修改）
+
+3. `/projects/:id/merge_requests/:merge_request_iid/changes` 接口`gitlab`后续会弃用，切换到`diffs`接口，但是当前项目`gitlab`版本不支持`diffs`接口（已检查对应版本的api文档），使用`sha+compare`接口替代`diffs`接口；不使用`changes`的原因是后续版本的`gitlab`会弃用`changes`接口，同时需要将`comment`添加到具体的`diff`行（这个改动目前只改了 MR，后续`Push`的也需要修改）
+    - 这里有个坑，无论支持使用`/projects/:id/merge_requests/:merge_request_iid/changes`接口，还是使用替代方案的`/projects/:id/repository/compare?from={base_sha}&to={head_sha}`接口，都无法获取新增文件的`diff`（转了一圈回到原点了属于是），针对这个问题，查看了API文档，`changes`文档中说明使用`?access_raw_diffs=true`参数，可以禁用 `diff` 内容的截断机制（即使超过默认大小限制，也会返回完整内容）
+    - 对于`changes`接口后续`gitlab`版本会弃用的问题，对当前项目环境无影响，因此暂不处理，新版本`gitlab`直接使用封装的`diffs`方法即可
+    - 使用`changes`接口仍需注意变更特别多的场景（如3000+行变更，暂未测试），仍然可能由于分页导致`diff`被截断等场景，需要测试
+    
 4. review的语料（进行中）：
-  当前：使用的是diffs + 提交信息，直接将diffs作为review的语料
+  当前：使用的是`diffs + 提交信息`，直接将diffs作为review的语料
   修改：
-    方案一：使用单个diff（即单个文件的diff）/diffs（所有文件的diff，diffs接口返回的列表）作为review的语料（简单，但效果差，缺少上下文）
-    方案二：单个文件的diff + 文件内容作为语料，效果稍好
-    方案三：单个改动点的diff行 + 完整的单个文件的diff内容 + 文件内容（修改后使用的方案）
+    方案一：使用单个`diff`（即单个文件的`diff`）`/diffs`（所有文件的`diff`，`diffs`接口返回的列表）作为`review`的语料（简单，但效果差，缺少上下文）
+    方案二：单个文件的`diff` + 文件内容作为语料，效果稍好
+    √ 方案三：单个改动点的`diff`行 + 单个文件完整的`diff`内容 + 文件完整内容
     方案四：在方案三的基础上，引入完整仓库解析，缺点是算力要求过大，暂不进行，效果未验证
 
-### 代办
+5. 增加一个 `GITLAB_USER_PRIVATE_TOKEN` 配置用于获取指定分支的文件
+
+6. 修改了添加评论的方式
+  - 当前直接将AICR的结果评论到指定行，还有缺陷，需要完整查看api使用规范
+    已知缺陷：
+            如果文件为新增文件，添加行内评论的锚点是原分支的行号，由于原分支并没有对应的文件，所以gitlab自动计算出来的line_code为空
+            看是否可以直接添加到目标分支上
+    问题修复：
+            对于新增文件，`POST /projects/:id/merge_requests/:merge_request_iid/discussions`接口不要上传`old_line`，否则会报错`{"message":"400 Bad request - Note {:line_code=>[\"不能为空字符\", \"must be a valid line code\"]}"}`
+            修复了`extract_line_numbers()`方法的缺陷
+    根本原因：
+            根本原因是行号的传递没搞清楚，查看接口文档对应接口的`Create a new thread in the merge request diff`，简单的来说，增加评论的行如果是：新增行使用 new_line、删除行使用 old_line，未变更行需同时包含两者，如：![line code举例](./doc/img/image_gitlab_discussion_line_code.png)
+  - 为了避免使用出错或者异常，增加了一个兜底，如果添加行内评论失败，则使用旧的方法直接添加到MR中，并给出提示
+
+### 待办
 1. Gitlab Push事件使用的changes接口需要修改
+2. Gitlab Push事件也需要需改为按照diff行进行评论
+3. preprocessing_diffs中的正则需要详细测试不同情况会不会丢数据、正则是否正确等
+
+### 自测
+
+#### 行内评论获取行号的自测场景
+1. 在行号1处，增加3行 √
+2. 在行号1处，删除3行 √
+3. 在行号1处，修改1行 √
+4. 在行号1处，修改3行 √
+4. 新增文件 √
+5. 删除文件 √
+检查是否能够添加到对应的行号锚点
+
+### 新增函数说明（后面需要自测）
+1. `handle_merge_request_event_v2`: 复写的`handle_merge_request_event`
+2. `extract_line_numbers`: 根据diff获取行内评论的行号
+3. `filter_diffs_by_file_types`: 复写的`filter_changes`，只过滤文件类型，不过滤字段
+4. `preprocessing_diffs`: 预处理diffs
+5. `get_merge_request_sha`
+6. `get_merge_request_changes`: 修改
+7. `get_merge_request_diffs`
+8. `get_merge_request_diffs_from_base_sha_to_head_sha`
+9. `add_merge_request_discussions_on_row`: 行内评论
+10. `get_gitlab_file_content`
+11. `review_code_simple`: AICR的核心，还需要完善可靠性等
 
 ## Easy-AI-CodeReview
 
@@ -239,7 +285,7 @@ firewall-cmd --reload
   - 如果 .env 文件中没有配置 GITLAB_ACCESS_TOKEN，则使用 Webhook 传递的Secret Token。
 2. 网络访问要求
   - 请确保 GitLab 能够访问本系统。
-  - 若内网环境受限，建议将系统部署在外网服务器上。
+  - 若当前项目环境受限，建议将系统部署在外网服务器上。
 
 ### 配置消息推送
 

@@ -14,8 +14,10 @@ from apscheduler.triggers.cron import CronTrigger
 from flask import Flask, request, jsonify
 
 from biz.gitlab.webhook_handler import slugify_url
-from biz.queue.worker import handle_merge_request_event, handle_push_event, handle_github_pull_request_event, \
+from biz.queue.worker import (
+    handle_merge_request_event, handle_merge_request_event_v2, handle_push_event, handle_github_pull_request_event, \
     handle_github_push_event
+)
 from biz.service.review_service import ReviewService
 from biz.utils.im import notifier
 from biz.utils.log import logger
@@ -188,7 +190,7 @@ def handle_gitlab_webhook(data):
     # 处理Merge Request Hook
     if object_kind == "merge_request":
         # 创建一个新进程进行异步处理
-        handle_queue(handle_merge_request_event, data, gitlab_token, gitlab_url, gitlab_url_slug)
+        handle_queue(handle_merge_request_event_v2, data, gitlab_token, gitlab_url, gitlab_url_slug)
         # 立马返回响应
         return jsonify(
             {'message': f'Request received(object_kind={object_kind}), will process asynchronously.'}), 200

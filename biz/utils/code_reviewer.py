@@ -74,6 +74,8 @@ class CodeReviewer(BaseReviewer):
             'js': 'javascript_review_prompt',
             'ts': 'javascript_review_prompt',
             'py': 'python_review_prompt',
+            'protobuf': 'proto_review_prompt',
+            'yaml': 'yaml_review_prompt',
         }
 
     def _detect_language_from_diff(self, diffs_text: str) -> str:
@@ -95,6 +97,9 @@ class CodeReviewer(BaseReviewer):
             '.c': 'c',
             '.h': 'cpp',
             '.hpp': 'cpp',
+            '.proto': 'protobuf ',
+            '.yaml': 'yaml',
+            '.yml': 'yaml ',
         }
         
         # 统计各种语言的文件数量
@@ -387,6 +392,26 @@ class CodeReviewer(BaseReviewer):
         ]
         return self.call_llm(messages)
 
+    def review_code_simple(self, diff, diffs, file_content):
+        """
+        review_code() 的简化版
+            1. 省略了复杂的文件类型解析和提示词匹配，后续再完善一个简洁的版本，需要严格控制返回的 content 的字
+                数（当前是单个diff review，理论上不会有大段大段的建议，避免“太长不看”
+            2. 省略了异常处理
+            3. 后续需要补充文件超过多少行、大小等的截断或者丢弃
+        """
+        messages = [
+            {
+                "role": "system",
+                "content": "你是一位资深编程专家，gitlab的commit代码变更将以git diff 字符串的形式提供，对应的完整文件内容将一同提供。然后，以精炼的语言指出存在的问题和修改意见，尽可能避免长篇大论。如果你觉得必要的情况下，可直接给出修改后的内容，否则只给出问题和修改意见。你的反馈内容必须使用严谨的markdown格式。"
+            },
+            {
+                "role": "user",
+                "content": f"请review这部分代码变更：\n 1. 请只对这一个git diff进行code review问题和修改意见：{diff} \n 2. 作为上下文参考，完整的文件内容为：\n {file_content} \n 这部分仅作为代码逻辑补充，无需code review \n 3. 作为上下文参考，针对该文件完整的git diff为：\n {diffs}\n 这部分仅作为代码逻辑补充，无需code review",
+            },
+        ]
+        return self.call_llm(messages)
+
     def _detect_language_from_changes(self, changes_data: list) -> str:
         """从changes数据中检测主要编程语言"""
         file_extensions = {
@@ -405,6 +430,9 @@ class CodeReviewer(BaseReviewer):
             '.c': 'c',
             '.h': 'cpp',
             '.hpp': 'cpp',
+            '.proto': 'protobuf ',
+            '.yaml': 'yaml',
+            '.yml': 'yaml ',
         }
         
         language_counts = {}
