@@ -36,10 +36,22 @@
             根本原因是行号的传递没搞清楚，查看接口文档对应接口的`Create a new thread in the merge request diff`，简单的来说，增加评论的行如果是：新增行使用 new_line、删除行使用 old_line，未变更行需同时包含两者，如：![line code举例](./doc/img/image_gitlab_discussion_line_code.png)
   - 为了避免使用出错或者异常，增加了一个兜底，如果添加行内评论失败，则使用旧的方法直接添加到MR中，并给出提示
 
+7. 新增集成类`EnhancedOpenAIClient(OpenAIClient)`，支持模型参数设置
+
+8. 新增`tokens`限制相关的方法
+  - 当前模型总上下文长度为 16k（`'object': 'error', 'message': "This model's maximum context length is 16000 tokens.`）
+  - 配置 15k 限制，限制`Input Tokens`为：10-12k；`Output Tokens`为：15k-10k，最长5k（纯汉字约5k，代码约几百行）
+    - 限制传入ai的文件内容，如果超过10k token，就截取文件改动点的上下500行作为语料
+    - `completions`方法内动态计算`max_tokens`，尽可能利用llm最大性能
+
+9. 修改代理源，减少打包时间
+
 ### 待办
 1. Gitlab Push事件使用的changes接口需要修改
 2. Gitlab Push事件也需要需改为按照diff行进行评论
 3. preprocessing_diffs中的正则需要详细测试不同情况会不会丢数据、正则是否正确等
+4. 简化了提示词后，评分系统失效，暂不修改
+5. 需要抓取Gitlab上对AICR的接口进行拒绝/通过的结果，以便统计效果等
 
 ### 自测
 
@@ -64,6 +76,7 @@
 9. `add_merge_request_discussions_on_row`: 行内评论
 10. `get_gitlab_file_content`
 11. `review_code_simple`: AICR的核心，还需要完善可靠性等
+12. `count_tokens`: AICR llm的基类增加了一个统计token的方法，当前只适配了OpenAI，其他大模型均未适配
 
 ## Easy-AI-CodeReview
 

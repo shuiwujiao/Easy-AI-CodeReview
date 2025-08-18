@@ -53,6 +53,9 @@ class BaseReviewer(abc.ABC):
         """抽象方法，子类必须实现"""
         pass
 
+    def count_tokens(self, text: str) -> int:
+        count = self.client.count_tokens(text=text)
+        return count
 
 class CodeReviewer(BaseReviewer):
     """代码 Diff 级别的审查"""
@@ -403,11 +406,11 @@ class CodeReviewer(BaseReviewer):
         messages = [
             {
                 "role": "system",
-                "content": "你是一位资深编程专家，gitlab的commit代码变更将以git diff 字符串的形式提供，对应的完整文件内容将一同提供。然后，以精炼的语言指出存在的问题和修改意见，尽可能避免长篇大论。如果你觉得必要的情况下，可直接给出修改后的内容，否则只给出问题和修改意见。你的反馈内容必须使用严谨的markdown格式。"
+                "content": "你是一位资深编程专家，gitlab的commit代码变更将以git diff 字符串的形式提供，对应的完整文件内容也将一同提供。然后，以精炼的语言指出存在的问题和修改意见，避免长篇大论和过度发散。如果你觉得必要的情况下，可直接给出关键修改内容，否则只给出问题和修改意见。你的反馈内容必须使用严谨的markdown格式，使用中文回答并控制在五百字以内。"
             },
             {
                 "role": "user",
-                "content": f"请review这部分代码变更：\n 1. 请只对这一个git diff进行code review问题和修改意见：{diff} \n 2. 作为上下文参考，完整的文件内容为：\n {file_content} \n 这部分仅作为代码逻辑补充，无需code review \n 3. 作为上下文参考，针对该文件完整的git diff为：\n {diffs}\n 这部分仅作为代码逻辑补充，无需code review",
+                "content": f"请review这部分代码变更：\n 1. 请只对这一个git diff进行code review问题分析和提供修改意见：{diff} \n 2. 作为上下文参考，完整的文件内容为：\n {file_content} \n 这部分仅作为代码逻辑补充，无需code review \n 3. 作为上下文参考，针对该文件完整的git diff为：\n {diffs}\n 这部分仅作为代码逻辑补充，无需code review",
             },
         ]
         return self.call_llm(messages)

@@ -199,29 +199,34 @@ def handle_merge_request_event_v2(webhook_data: dict, gitlab_token: str, gitlab_
         diffs = preprocessing_diffs(diffs) # 重新赋值修改新的diffs
         logger.info("split diffs: %s", diffs)
 
-        # 0. 获取 sha: head_sha, base_sha, start_sha
+        # 获取 sha: head_sha, base_sha, start_sha，用于定位行内评论的位置
         sha = handler.get_merge_request_sha()
+        # 0. 对每一个改动点进行语料补充，并提交ai review
         for diff in diffs:
-            # 1. 提取行号用于添加评论
+            # 1. 提取文件路径、行号用于添加评论
             old_path = diff.get("old_path")
             new_path = diff.get("new_path")
-            # 获取添加评论的行号
-            old_line, new_line = extract_line_numbers(diff)
+            old_line, new_line = extract_line_numbers(diff) # 获取添加评论的行号
 
-            # 2. 获取diff文件的完整文件内容【需要做限制，待完成】
-            #    比如过滤文件大小、截断
-
-            # 这里还需要做判断，如果是新增的文件，则不需要传入diff、file_content
+            # 2. 判断是否为新增文件，如果是新增的文件，则不需要传入diffs、file_content，因为diff就是完整内容
             if diff.get("new_file") == True or diff.get("new_file") == "true":
-                logger.debug(f"文件{new_path}为本次commit/mr新增文件，无需且无法从目标分支上去获取最新改动")
-                # 新增文件不需要再次传入重复的 diff 和 file_content
-                review_result = CodeReviewer().review_code_simple(diff, "当前diff为新增文件", "当前diff为新增文件")
+                diffs_tmp, file_content_tmp = "当前diff为新增文件", "当前diff为新增文件"
             else:
                 file_content = handler.get_gitlab_file_content(branch_type="source_branch", file_path=new_path) # 获取修改后的完整文件内容
-                # 2. 将单个 diff + file content 发送到 ai review
-                review_result = CodeReviewer().review_code_simple(diff, diffs, file_content)
+                diffs_tmp, file_content_tmp = diffs, file_content
+            
+            # 3. 对获取到的diff文件做限制，如过滤文件大小、截断 【待完成，当前使用token做了限制】
 
-            # 3. 添加评论
+            # 4. 分析文件内容对应的token，如果超过限制，则取改动点前后 500 行的代码作为上下文传递给 ai，大概是 8-10k token
+            file_tokens_count = CodeReviewer().count_tokens(text=file_content_tmp)
+            if file_tokens_count >= 10000:
+                logger.debug(f"当前文件tokens为: {file_tokens_count}，超过限制的10k token, 截取改动点前后500行代码作为上下文")
+                file_content_tmp = extract_surrounding_lines(text=file_content, line_number=new_line, context_line_num=500)
+
+            # 5. 将单个 prompt: diff + file content 发到 ai review
+            review_result = CodeReviewer().review_code_simple(diff, diffs_tmp, file_content_tmp)
+
+            # 6. 添加评论
             handler.add_merge_request_discussions_on_row(
                 content=review_result,
                 base_sha=sha["base_sha"],
@@ -450,3 +455,30 @@ def extract_line_numbers(diff_entry):
     
     # 如果没有找到有效的行号信息
     return None, None
+
+
+def extract_surrounding_lines(text, line_number: int, context_line_num: int = 50):
+    """
+    提取文本中指定行前后指定行的内容（默认50）
+    
+    参数:
+        text: 原始文本内容（通常来自requests.get().text）
+        line_number: 目标行号（从1开始计数）
+        
+    返回:
+        包含目标行前后50行内容的字符串，每行保留原始换行符
+    """
+    # 将文本按行分割，保留空行
+    lines = text.splitlines(keepends=True)
+    
+    # 验证行号有效性
+    total_lines = len(lines)
+    if line_number < 1 or line_number > total_lines:
+        raise ValueError(f"行号超出范围，有效行号为1到{total_lines}")
+    
+    # 计算起始行和结束行
+    start = max(0, line_number - 1 - context_line_num)
+    end = min(total_lines, line_number + context_line_num)
+    
+    # 提取对应范围的行并合并
+    return ''.join(lines[start:end])

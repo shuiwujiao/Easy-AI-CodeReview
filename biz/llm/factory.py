@@ -3,7 +3,7 @@ import os
 from biz.llm.client.base import BaseClient
 from biz.llm.client.deepseek import DeepSeekClient
 from biz.llm.client.ollama_client import OllamaClient
-from biz.llm.client.openai import OpenAIClient
+from biz.llm.client.openai import OpenAIClient, EnhancedOpenAIClient
 from biz.llm.client.qwen import QwenClient
 from biz.llm.client.zhipuai import ZhipuaiClient as ZhipuAIClient
 from biz.utils.log import logger
@@ -15,7 +15,7 @@ class Factory:
         provider = provider or os.getenv("LLM_PROVIDER", "openai")
         chat_model_providers = {
             'zhipuai': lambda: ZhipuAIClient(),
-            'openai': lambda: OpenAIClient(),
+            'openai': lambda: EnhancedOpenAIClient(), # 适配qwen参数
             'deepseek': lambda: DeepSeekClient(),
             'qwen': lambda: QwenClient(),
             'ollama': lambda : OllamaClient()

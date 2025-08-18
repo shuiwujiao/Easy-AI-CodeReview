@@ -13,8 +13,8 @@ class BaseClient:
         try:
             result = self.completions(messages=[{"role": "user", "content": '请仅返回 "ok"。'}])
             return result and result == 'ok'
-        except Exception:
-            logger.error("尝试连接LLM失败， {e}")
+        except Exception as e:
+            logger.error(f"尝试连接LLM失败， {e}")
             return False
 
     @abstractmethod
@@ -24,3 +24,8 @@ class BaseClient:
                     ) -> str:
         """Chat with the model.
         """
+
+    # token计算接口
+    @abstractmethod
+    def count_tokens(self, text: str) -> int:
+        """不同llm要提供对应的计算文本的token数量方法"""
