@@ -22,7 +22,8 @@
     √ 方案三：单个改动点的`diff`行 + 单个文件完整的`diff`内容 + 文件完整内容
     方案四：在方案三的基础上，引入完整仓库解析，缺点是算力要求过大，暂不进行，效果未验证
 
-5. 增加一个 `GITLAB_USER_PRIVATE_TOKEN` 配置用于获取指定分支的文件
+5. ~~增加一个 `GITLAB_USER_PRIVATE_TOKEN` 配置用于获取指定分支的文件~~，理解错误，应该复用`GITLAB_ACCESS_TOKEN`
+  - 修改为优先从请求头获取，这样配合`gitlab webhook`设置`secret token`就能够实现通用所有仓库
 
 6. 修改了添加评论的方式
   - 当前直接将AICR的结果评论到指定行，还有缺陷，需要完整查看api使用规范
@@ -45,6 +46,8 @@
     - `completions`方法内动态计算`max_tokens`，尽可能利用llm最大性能
 
 9. 修改代理源，减少打包时间
+
+10. 适配k8s健康检查的`livenessProbe`和`readinessProbe`接口
 
 ### 待办
 1. Gitlab Push事件使用的changes接口需要修改
