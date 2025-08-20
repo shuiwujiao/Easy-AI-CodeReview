@@ -1,7 +1,7 @@
 ## Modify content
 为了适配工作环境差异的需要，从
 - [Easy-AI-CodeReview](https://github.com/spherical-up/Easy-AI-CodeReview) fork了一份用于修改
-
+感谢原作者[sunmh207](https://github.com/sunmh207)开源[AI-Codereview-Gitlab](https://github.com/sunmh207/AI-Codereview-Gitlab)，请支持原作者。
 感谢原作者[spherical-up](https://github.com/spherical-up)开源，请支持原作者。
 
 ### 改动点
@@ -9,31 +9,33 @@
 
 2. 增加`.proto`、`.yml`文件的review提示词
 
-3. `/projects/:id/merge_requests/:merge_request_iid/changes` 接口`gitlab`后续会弃用，切换到`diffs`接口，但是当前项目`gitlab`版本不支持`diffs`接口（已检查对应版本的api文档），使用`sha+compare`接口替代`diffs`接口；不使用`changes`的原因是后续版本的`gitlab`会弃用`changes`接口，同时需要将`comment`添加到具体的`diff`行（这个改动目前只改了 MR，后续`Push`的也需要修改）
-    - 这里有个坑，无论支持使用`/projects/:id/merge_requests/:merge_request_iid/changes`接口，还是使用替代方案的`/projects/:id/repository/compare?from={base_sha}&to={head_sha}`接口，都无法获取新增文件的`diff`（转了一圈回到原点了属于是），针对这个问题，查看了API文档，`changes`文档中说明使用`?access_raw_diffs=true`参数，可以禁用 `diff` 内容的截断机制（即使超过默认大小限制，也会返回完整内容）
+3. 使用`changes`、`diffs`、`compare`三种方式获取变更内容的坑
+`/projects/:id/merge_requests/:merge_request_iid/changes` 接口`gitlab`后续会弃用，切换到`diffs`接口，但是当前项目`gitlab`版本不支持`diffs`接口（已检查对应版本的api文档），使用`sha+compare`接口替代`diffs`接口；不使用`changes`的原因是后续版本的`gitlab`会弃用`changes`接口，同时需要将`comment`添加到具体的`diff`行（这个改动目前只改了 MR，后续`Push`的也需要修改）
+    - 这里有个坑，无论直接使用`/projects/:id/merge_requests/:merge_request_iid/changes`接口，还是使用替代方案的`/projects/:id/repository/compare?from={base_sha}&to={head_sha}`接口，都无法获取新增文件的`diff`（转了一圈回到原点了属于是），针对这个问题，查看了API文档，`changes`文档中说明使用`?access_raw_diffs=true`参数，可以禁用 `diff` 内容的截断机制（即使超过默认大小限制，也会返回完整内容）
     - 对于`changes`接口后续`gitlab`版本会弃用的问题，对当前项目环境无影响，因此暂不处理，新版本`gitlab`直接使用封装的`diffs`方法即可
     - 使用`changes`接口仍需注意变更特别多的场景（如3000+行变更，暂未测试），仍然可能由于分页导致`diff`被截断等场景，需要测试
-    
+    - 【方案备注】从网页访问`project/brunch/-/merge_requests/:merge_request_iid/diffs`是有数据的，但是使用api: `/projects/:id/merge_requests/:merge_request_iid/diffs`确获取不到数据，目前是看14.10版本的gitlab doc确实是没有相关接口的说明，很奇怪
+
 4. review的语料（进行中）：
   当前：使用的是`diffs + 提交信息`，直接将diffs作为review的语料
   修改：
-    方案一：使用单个`diff`（即单个文件的`diff`）`/diffs`（所有文件的`diff`，`diffs`接口返回的列表）作为`review`的语料（简单，但效果差，缺少上下文）
-    方案二：单个文件的`diff` + 文件内容作为语料，效果稍好
-    √ 方案三：单个改动点的`diff`行 + 单个文件完整的`diff`内容 + 文件完整内容
-    方案四：在方案三的基础上，引入完整仓库解析，缺点是算力要求过大，暂不进行，效果未验证
+    - 方案一：使用单个`diff`（即单个文件的`diff`）`/diffs`（所有文件的`diff`，`diffs`接口返回的列表）作为`review`的语料（简单，但效果差，缺少上下文）
+    - 方案二：单个文件的`diff` + 文件内容作为语料，效果稍好
+    - √ 方案三：单个改动点的`diff`行 + 单个文件完整的`diff`内容 + 文件完整内容
+    - 方案四：在方案三的基础上，引入完整仓库解析，缺点是算力要求过大，暂不进行，效果未验证
 
 5. ~~增加一个 `GITLAB_USER_PRIVATE_TOKEN` 配置用于获取指定分支的文件~~，理解错误，应该复用`GITLAB_ACCESS_TOKEN`
   - 修改为优先从请求头获取，这样配合`gitlab webhook`设置`secret token`就能够实现通用所有仓库
 
 6. 修改了添加评论的方式
   - 当前直接将AICR的结果评论到指定行，还有缺陷，需要完整查看api使用规范
-    已知缺陷：
+    - 已知缺陷：
             如果文件为新增文件，添加行内评论的锚点是原分支的行号，由于原分支并没有对应的文件，所以gitlab自动计算出来的line_code为空
             看是否可以直接添加到目标分支上
-    问题修复：
+    - 问题修复：
             对于新增文件，`POST /projects/:id/merge_requests/:merge_request_iid/discussions`接口不要上传`old_line`，否则会报错`{"message":"400 Bad request - Note {:line_code=>[\"不能为空字符\", \"must be a valid line code\"]}"}`
             修复了`extract_line_numbers()`方法的缺陷
-    根本原因：
+    - 根本原因：
             根本原因是行号的传递没搞清楚，查看接口文档对应接口的`Create a new thread in the merge request diff`，简单的来说，增加评论的行如果是：新增行使用 new_line、删除行使用 old_line，未变更行需同时包含两者，如：![line code举例](./doc/img/image_gitlab_discussion_line_code.png)
   - 为了避免使用出错或者异常，增加了一个兜底，如果添加行内评论失败，则使用旧的方法直接添加到MR中，并给出提示
 
@@ -51,10 +53,17 @@
 
 ### 待办
 1. Gitlab Push事件使用的changes接口需要修改
-2. Gitlab Push事件也需要需改为按照diff行进行评论
-3. preprocessing_diffs中的正则需要详细测试不同情况会不会丢数据、正则是否正确等
-4. 简化了提示词后，评分系统失效，暂不修改
-5. 需要抓取Gitlab上对AICR的接口进行拒绝/通过的结果，以便统计效果等
+2. changes接口是否有性能问题，还需要测试，目前使用测试了3000行代码提交是正常的
+3. Gitlab Push事件也需要需改为按照diff行进行评论
+4. preprocessing_diffs中的正则需要详细测试不同情况会不会丢数据、正则是否正确等
+5. 简化了提示词后，评分系统失效，暂不修改
+6. 需要抓取Gitlab上对AICR的接口进行拒绝/通过的结果，以便统计效果等
+7. 把当前的后端统计服务用起来（先修复评分系统）
+8. √ `GITLAB_ACCESS_TOKEN` 和 `GITLAB_USER_PRIVATE_TOKEN`（新增的）是同一个东西，已删除后者， `GITLAB_ACCESS_TOKEN`可以通过`webhook`创建的时候通过请求头传递后端服务，即可通用所有仓库
+9. 后端还需要过滤分支？但是这样不通用，不同仓库、甚至不同项目，分支可能都不一样，但是`webhook`配置的时候只有push可以配置分支，mr不能配置分支
+10. 因为使用的是外网专线，需要监控/控制流量
+11. 日志调整和优化、关debug日志
+12. 考虑[把整个项目作为基础信息，再去ai审查代码](https://github.com/sunmh207/AI-Codereview-Gitlab/issues/10)
 
 ### 自测
 
@@ -67,7 +76,7 @@
 5. 删除文件 √
 检查是否能够添加到对应的行号锚点
 
-### 新增函数说明（后面需要自测）
+#### 新增函数说明（后面需要自测）
 1. `handle_merge_request_event_v2`: 复写的`handle_merge_request_event`
 2. `extract_line_numbers`: 根据diff获取行内评论的行号
 3. `filter_diffs_by_file_types`: 复写的`filter_changes`，只过滤文件类型，不过滤字段
